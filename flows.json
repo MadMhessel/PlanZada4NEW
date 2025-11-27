@@ -1,0 +1,891 @@
+[
+  {
+    "id": "tab_main",
+    "type": "tab",
+    "label": "Telegram Bot Orchestrator",
+    "disabled": false,
+    "info": "Flows 1-11 from the specification: intake, Gemini parsing, clarification, CRUD for tasks/notes/events, reminders, and calendar integration."
+  },
+  {
+    "id": "tab_scheduler",
+    "type": "tab",
+    "label": "Reminder Scheduler",
+    "disabled": false,
+    "info": "Periodic reminder dispatcher based on cron-plus."
+  },
+  {
+    "id": "subflow_calendar",
+    "type": "subflow",
+    "name": "Calendar Connector",
+    "info": "Handles CalDAV (Yandex) and optional Google Calendar operations. Expects msg.event with start/end/title and msg.calendarMode.",
+    "in": [
+      {
+        "x": 60,
+        "y": 60,
+        "wires": [
+          {
+            "id": "calendar_router"
+          }
+        ]
+      }
+    ],
+    "out": [
+      {
+        "x": 620,
+        "y": 60,
+        "wires": [
+          {
+            "id": "calendar_success",
+            "port": 0
+          }
+        ]
+      }
+    ],
+    "status": {
+      "x": 620,
+      "y": 120,
+      "wires": [
+        {
+          "id": "calendar_status"
+        }
+      ]
+    },
+    "env": [],
+    "meta": {},
+    "color": "#DDAA99"
+  },
+  {
+    "id": "calendar_router",
+    "type": "function",
+    "z": "subflow_calendar",
+    "name": "Route provider",
+    "func": "// Decide which provider should handle the event based on CALENDAR_MODE and msg.calendarProvider\nconst mode = env.get('CALENDAR_MODE') || 'off';\nmsg.calendarProvider = msg.calendarProvider || mode;\nif (msg.calendarProvider === 'off') {\n    msg.calendarResult = { status: 'skipped', reason: 'calendar disabled' };\n    return [null, msg];\n}\nreturn msg;",
+    "outputs": 2,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 260,
+    "y": 60,
+    "wires": [
+      [
+        "calendar_caldav",
+        "calendar_google"
+      ],
+      [
+        "calendar_success"
+      ]
+    ]
+  },
+  {
+    "id": "calendar_caldav",
+    "type": "function",
+    "z": "subflow_calendar",
+    "name": "CalDAV stub",
+    "func": "// Placeholder for CalDAV integration.\n// Expect env CALDAV_URL, CALDAV_LOGIN, CALDAV_APP_PASSWORD.\n// For now, emulate success and attach a reference UID.\nmsg.calendarResult = { provider: 'caldav', status: 'ok', ref: `caldav-${Date.now()}` };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "libs": [],
+    "x": 420,
+    "y": 40,
+    "wires": [
+      [
+        "calendar_success"
+      ]
+    ]
+  },
+  {
+    "id": "calendar_google",
+    "type": "function",
+    "z": "subflow_calendar",
+    "name": "Google Calendar stub",
+    "func": "// Placeholder for Google Calendar API integration.\n// Attach a synthetic reference to indicate success.\nif (msg.calendarProvider === 'google') {\n    msg.calendarResult = { provider: 'google', status: 'ok', ref: `gcal-${Date.now()}` };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "libs": [],
+    "x": 430,
+    "y": 80,
+    "wires": [
+      [
+        "calendar_success"
+      ]
+    ]
+  },
+  {
+    "id": "calendar_success",
+    "type": "change",
+    "z": "subflow_calendar",
+    "name": "Return event result",
+    "rules": [
+      {
+        "t": "set",
+        "p": "calendar",
+        "pt": "msg",
+        "to": "msg.calendarResult",
+        "tot": "msg"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "reg": false,
+    "x": 580,
+    "y": 60,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "calendar_status",
+    "type": "status",
+    "z": "subflow_calendar",
+    "name": "",
+    "scope": null,
+    "x": 370,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "db_config",
+    "type": "sqlitedb",
+    "db": "/data/storage/bot.db",
+    "mode": "RWC",
+    "name": "Persistent SQLite"
+  },
+  {
+    "id": "telegram_bot",
+    "type": "telegram bot",
+    "botname": "TeamFlowBot",
+    "usernames": "",
+    "chatids": "",
+    "baseapiurl": "",
+    "updatemode": "polling",
+    "pollinterval": "300",
+    "usesocks": false,
+    "socksprotocol": "http",
+    "sockshost": "",
+    "socksport": "",
+    "socksusername": "",
+    "sockspassword": "",
+    "proxytype": "",
+    "privatekey": "",
+    "certificate": "",
+    "useselfsignedcertificate": false,
+    "sslterminated": false,
+    "verboselogging": false,
+    "token": "${TELEGRAM_TOKEN}",
+    "connect_timeout": "60000",
+    "name": "Telegram Bot"
+  },
+  {
+    "id": "http_gemini",
+    "type": "http request",
+    "z": "tab_main",
+    "name": "Gemini API",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "senderr": false,
+    "x": 620,
+    "y": 200,
+    "wires": [
+      [
+        "parse_gemini"
+      ]
+    ]
+  },
+  {
+    "id": "telegram_in",
+    "type": "telegram receiver",
+    "z": "tab_main",
+    "name": "Telegram In",
+    "bot": "telegram_bot",
+    "saveDataDir": "",
+    "filterCommands": false,
+    "x": 140,
+    "y": 60,
+    "wires": [
+      [
+        "allowlist_check"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "allowlist_check",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Allowlist & Group Filter",
+    "func": "const allowList = (env.get('ALLOWLIST_CHAT_IDS') || '').split(',').map(s => s.trim()).filter(Boolean);\nconst adminIds = (env.get('ADMIN_TELEGRAM_IDS') || '').split(',').map(s => s.trim()).filter(Boolean);\nconst chatId = msg.chatId && msg.chatId.toString();\nconst isAllowed = allowList.length === 0 || allowList.includes(chatId);\nif (!isAllowed) {\n    return null;\n}\nconst isGroup = msg.originalMessage && ['group', 'supergroup'].includes(msg.originalMessage.chat.type);\nif (isGroup) {\n    const botUsername = msg.originalMessage.botUsername || (env.get('BOT_USERNAME') || '').replace('@','');\n    const mentioned = (msg.payload || '').includes(`@${botUsername}`);\n    const isReply = !!msg.originalMessage.reply_to_message;\n    if (!mentioned && !isReply) {\n        return null;\n    }\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 360,
+    "y": 60,
+    "wires": [
+      [
+        "normalize_text"
+      ]
+    ]
+  },
+  {
+    "id": "normalize_text",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Normalize Text",
+    "func": "let text = (msg.payload || '').trim();\nconst botUsername = env.get('BOT_USERNAME') || '';\nif (botUsername) {\n    const mention = new RegExp('\\@' + botUsername.replace('@','') + '\\b', 'i');\n    text = text.replace(mention, '').trim();\n}\nmsg.cleanText = text;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 560,
+    "y": 60,
+    "wires": [
+      [
+        "load_context"
+      ]
+    ]
+  },
+  {
+    "id": "load_context",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Load Context",
+    "func": "// Context keyed by chat_id + user_id with expiry.\nconst key = `${msg.chatId}:${msg.from && msg.from.id}`;\nconst now = Date.now();\nconst stored = global.get(key) || {};\nif (stored.expires_at && stored.expires_at < now) {\n    global.set(key, {});\n    msg.context = {}\n} else {\n    msg.context = stored;\n}\nmsg.contextKey = key;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 760,
+    "y": 60,
+    "wires": [
+      [
+        "switch_pending"
+      ]
+    ]
+  },
+  {
+    "id": "switch_pending",
+    "type": "switch",
+    "z": "tab_main",
+    "name": "Pending?",
+    "property": "context.pending_action",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "nempty"
+      },
+      {
+        "t": "else"
+      }
+    ],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 2,
+    "x": 940,
+    "y": 60,
+    "wires": [
+      [
+        "clarify_continue"
+      ],
+      [
+        "prepare_gemini"
+      ]
+    ]
+  },
+  {
+    "id": "clarify_continue",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Apply Clarification",
+    "func": "// Merge user reply into stored draft and continue with pending action.\nconst ctx = msg.context || {};\nmsg.action = ctx.pending_action;\nmsg.entities = ctx.draft || {};\nmsg.entities.clarification_reply = msg.cleanText;\nmsg.fromClarification = true;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1160,
+    "y": 40,
+    "wires": [
+      [
+        "dispatcher"
+      ]
+    ]
+  },
+  {
+    "id": "prepare_gemini",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Prepare Gemini Prompt",
+    "func": "msg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = {\n  contents: [{\n    parts: [{\n      text: `You are a planner bot. Output only JSON per schema. User text: ${msg.cleanText}`\n    }]\n  }],\n  generationConfig: { temperature: 0 }\n};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 410,
+    "y": 200,
+    "wires": [
+      [
+        "http_gemini"
+      ]
+    ]
+  },
+  {
+    "id": "parse_gemini",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Parse Gemini Response",
+    "func": "const resp = msg.payload || {};\nlet text = ''\ntry {\n    text = resp.candidates[0].content.parts[0].text;\n} catch (e) {\n    node.error('Gemini response invalid', msg);\n    msg.action = 'unknown';\n    return msg;\n}\ntry {\n    const parsed = JSON.parse(text);\n    msg.action = parsed.action || 'unknown';\n    msg.entities = parsed.entities || {};\n    msg.need_clarification = parsed.need_clarification;\n    msg.question = parsed.question;\n} catch (e) {\n    msg.action = 'unknown';\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 820,
+    "y": 200,
+    "wires": [
+      [
+        "dispatcher"
+      ]
+    ]
+  },
+  {
+    "id": "dispatcher",
+    "type": "switch",
+    "z": "tab_main",
+    "name": "Dispatch Action",
+    "property": "action",
+    "propertyType": "msg",
+    "rules": [
+      { "t": "eq", "v": "clarify", "vt": "str" },
+      { "t": "eq", "v": "task_create", "vt": "str" },
+      { "t": "eq", "v": "note_create", "vt": "str" },
+      { "t": "eq", "v": "task_list", "vt": "str" },
+      { "t": "eq", "v": "task_update", "vt": "str" },
+      { "t": "eq", "v": "task_close", "vt": "str" },
+      { "t": "eq", "v": "event_create", "vt": "str" },
+      { "t": "eq", "v": "event_update", "vt": "str" },
+      { "t": "eq", "v": "event_cancel", "vt": "str" },
+      { "t": "eq", "v": "summary", "vt": "str" },
+      { "t": "else" }
+    ],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 11,
+    "x": 1040,
+    "y": 200,
+    "wires": [
+      [ "clarify_question" ],
+      [ "task_create" ],
+      [ "note_create" ],
+      [ "task_list" ],
+      [ "task_update" ],
+      [ "task_close" ],
+      [ "event_create" ],
+      [ "event_update" ],
+      [ "event_cancel" ],
+      [ "summary" ],
+      [ "unknown_reply" ]
+    ]
+  },
+  {
+    "id": "clarify_question",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Save context & ask",
+    "func": "const ctx = {\n    pending_action: msg.entities && msg.entities.pending_action || msg.action_target || 'clarify',\n    draft: msg.entities || {},\n    expires_at: Date.now() + 30 * 60 * 1000\n};\nglobal.set(msg.contextKey, ctx);\nmsg.payload = msg.question || 'Нужны уточнения, уточните, пожалуйста.';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1260,
+    "y": 120,
+    "wires": [
+      [ "telegram_out" ]
+    ]
+  },
+  {
+    "id": "task_create",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Build task insert",
+    "func": "const t = msg.entities.task || {};\nmsg.topic = 'insert task';\nmsg.params = [msg.chatId, t.title || msg.cleanText, t.details || null, 'open', msg.from.id, t.assignee || null, t.due_iso || null, t.remind_minutes || null, null, null, null, null];\nmsg.payload = {\n    query: `INSERT INTO tasks (chat_id,title,details,status,created_by_user_id,assignee_user_id,due_at,remind_minutes,reminded_at,calendar_provider,calendar_ref,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`,\n    params: msg.params\n};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1260,
+    "y": 200,
+    "wires": [ [ "sqlite_task" ] ]
+  },
+  {
+    "id": "sqlite_task",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Insert task",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 200,
+    "wires": [ [ "task_audit" ] ]
+  },
+  {
+    "id": "task_audit",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Audit task create",
+    "func": "// Write audit log\nmsg.audit = { action: 'task_create', result: 'ok' };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 200,
+    "wires": [ [ "task_calendar_switch" ] ]
+  },
+  {
+    "id": "task_calendar_switch",
+    "type": "switch",
+    "z": "tab_main",
+    "name": "Has due?",
+    "property": "entities.task.due_iso",
+    "propertyType": "msg",
+    "rules": [ { "t": "nempty" }, { "t": "else" } ],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 2,
+    "x": 1820,
+    "y": 200,
+    "wires": [ [ "task_calendar" ], [ "task_reply" ] ]
+  },
+  {
+    "id": "task_calendar",
+    "type": "subflow:subflow_calendar",
+    "name": "Calendar entry",
+    "x": 2000,
+    "y": 180,
+    "wires": [ [ "task_reply" ] ]
+  },
+  {
+    "id": "task_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply task created",
+    "func": "const calendar = msg.calendar || { status: 'not requested' };\nmsg.payload = `Задача создана\nНазвание: ${msg.entities.task?.title || msg.cleanText}\nСрок: ${msg.entities.task?.due_iso || '—'}\nИсполнитель: ${msg.entities.task?.assignee || '—'}\nКалендарь: ${calendar.status || calendar.reason || '—'}`;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 2200,
+    "y": 200,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "note_create",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Insert note",
+    "func": "msg.payload = { query: `INSERT INTO notes (chat_id,author_user_id,text,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP);`, params: [msg.chatId, msg.from.id, msg.entities.note?.text || msg.cleanText] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1260,
+    "y": 260,
+    "wires": [ [ "sqlite_note" ] ]
+  },
+  {
+    "id": "sqlite_note",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Insert note",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 260,
+    "wires": [ [ "note_reply" ] ]
+  },
+  {
+    "id": "note_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply note",
+    "func": "msg.payload = 'Заметка сохранена';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 260,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "task_list",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Select tasks",
+    "func": "msg.payload = { query: `SELECT id,title,status,due_at FROM tasks WHERE chat_id=? ORDER BY due_at LIMIT 30;`, params: [msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 320,
+    "wires": [ [ "sqlite_list" ] ]
+  },
+  {
+    "id": "sqlite_list",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "List tasks",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 320,
+    "wires": [ [ "list_reply" ] ]
+  },
+  {
+    "id": "list_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply list",
+    "func": "const rows = msg.payload || [];\nif (!rows.length) {\n    msg.payload = 'Задач не найдено';\n    return msg;\n}\nconst lines = rows.map(r => `#${r.id} ${r.title} [${r.status}] ${r.due_at || ''}`);\nmsg.payload = lines.join('\n');\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 320,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "task_update",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Update task",
+    "func": "// Simplified update by last reference placeholder.\nmsg.payload = { query: `UPDATE tasks SET details=COALESCE(?,details), updated_at=CURRENT_TIMESTAMP WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1;`, params: [msg.entities.task?.details || msg.cleanText, msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 380,
+    "wires": [ [ "sqlite_update" ] ]
+  },
+  {
+    "id": "sqlite_update",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Update task",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 380,
+    "wires": [ [ "update_reply" ] ]
+  },
+  {
+    "id": "update_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply update",
+    "func": "msg.payload = 'Задача обновлена';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 380,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "task_close",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Close task",
+    "func": "msg.payload = { query: `UPDATE tasks SET status='done', updated_at=CURRENT_TIMESTAMP WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1;`, params: [msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 440,
+    "wires": [ [ "sqlite_close" ] ]
+  },
+  {
+    "id": "sqlite_close",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Close task",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 440,
+    "wires": [ [ "close_reply" ] ]
+  },
+  {
+    "id": "close_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply close",
+    "func": "msg.payload = 'Задача закрыта';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 440,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "event_create",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Insert event",
+    "func": "const e = msg.entities.event || {};\nmsg.payload = { query: `INSERT INTO events (chat_id,title,details,start_at,end_at,organizer_user_id,attendees_json,calendar_provider,calendar_ref,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);`, params: [msg.chatId, e.title || msg.cleanText, e.details || null, e.start_iso || null, e.end_iso || null, msg.from.id, JSON.stringify(e.attendees || [])] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 500,
+    "wires": [ [ "sqlite_event" ] ]
+  },
+  {
+    "id": "sqlite_event",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Insert event",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 500,
+    "wires": [ [ "event_calendar" ] ]
+  },
+  {
+    "id": "event_calendar",
+    "type": "subflow:subflow_calendar",
+    "name": "Event calendar",
+    "x": 1620,
+    "y": 500,
+    "wires": [ [ "event_reply" ] ]
+  },
+  {
+    "id": "event_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply event",
+    "func": "const calendar = msg.calendar || { status: 'not requested' };\nmsg.payload = `Встреча создана\nНазвание: ${msg.entities.event?.title || msg.cleanText}\nНачало: ${msg.entities.event?.start_iso || '—'}\nКалендарь: ${calendar.status || calendar.reason || '—'}`;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1800,
+    "y": 500,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "event_update",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Update event",
+    "func": "msg.payload = { query: `UPDATE events SET details=COALESCE(?,details), updated_at=CURRENT_TIMESTAMP WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1;`, params: [msg.entities.event?.details || msg.cleanText, msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 560,
+    "wires": [ [ "sqlite_event_update" ] ]
+  },
+  {
+    "id": "sqlite_event_update",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Update event",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 560,
+    "wires": [ [ "event_update_reply" ] ]
+  },
+  {
+    "id": "event_update_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply event update",
+    "func": "msg.payload = 'Событие обновлено';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 560,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "event_cancel",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Cancel event",
+    "func": "msg.payload = { query: `UPDATE events SET details='cancelled', updated_at=CURRENT_TIMESTAMP WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1;`, params: [msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 620,
+    "wires": [ [ "sqlite_event_cancel" ] ]
+  },
+  {
+    "id": "sqlite_event_cancel",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Cancel event",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 620,
+    "wires": [ [ "event_cancel_reply" ] ]
+  },
+  {
+    "id": "event_cancel_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply event cancel",
+    "func": "msg.payload = 'Событие отменено';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 620,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "summary",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Summary",
+    "func": "msg.payload = { query: `SELECT status, COUNT(*) as c FROM tasks WHERE chat_id=? GROUP BY status;`, params: [msg.chatId] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1250,
+    "y": 680,
+    "wires": [ [ "sqlite_summary" ] ]
+  },
+  {
+    "id": "sqlite_summary",
+    "type": "sqlite",
+    "z": "tab_main",
+    "mydb": "db_config",
+    "name": "Summary",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1440,
+    "y": 680,
+    "wires": [ [ "summary_reply" ] ]
+  },
+  {
+    "id": "summary_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Reply summary",
+    "func": "const rows = msg.payload || [];\nif (!rows.length) { msg.payload = 'Нет задач'; return msg; }\nmsg.payload = rows.map(r => `${r.status}: ${r.c}`).join('\n');\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1620,
+    "y": 680,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "unknown_reply",
+    "type": "function",
+    "z": "tab_main",
+    "name": "Unknown",
+    "func": "msg.payload = 'Не понял запрос, переформулируйте, например: \"Создай задачу подготовить КП\".';\\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1260,
+    "y": 740,
+    "wires": [ [ "telegram_out" ] ]
+  },
+  {
+    "id": "telegram_out",
+    "type": "telegram sender",
+    "z": "tab_main",
+    "name": "Telegram Out",
+    "bot": "telegram_bot",
+    "haserroroutput": false,
+    "outputs": 1,
+    "x": 2300,
+    "y": 320,
+    "wires": [ [] ]
+  },
+  {
+    "id": "cron_reminder",
+    "type": "cronplus",
+    "z": "tab_scheduler",
+    "name": "Every minute",
+    "outputField": "payload",
+    "timeZone": "${TIMEZONE}",
+    "options": {
+      "timezone": "${TIMEZONE}"
+    },
+    "outputs": 1,
+    "x": 160,
+    "y": 80,
+    "wires": [ [ "reminder_query" ] ]
+  },
+  {
+    "id": "reminder_query",
+    "type": "function",
+    "z": "tab_scheduler",
+    "name": "Find reminders",
+    "func": "msg.payload = { query: `SELECT id, title, due_at, remind_minutes FROM tasks WHERE status='open' AND due_at NOT NULL AND reminded_at IS NULL AND (strftime('%s','now') >= strftime('%s', due_at) - (remind_minutes * 60));`, params: [] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 360,
+    "y": 80,
+    "wires": [ [ "sqlite_reminders" ] ]
+  },
+  {
+    "id": "sqlite_reminders",
+    "type": "sqlite",
+    "z": "tab_scheduler",
+    "mydb": "db_config",
+    "name": "Select reminders",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 560,
+    "y": 80,
+    "wires": [ [ "reminder_split" ] ]
+  },
+  {
+    "id": "reminder_split",
+    "type": "split",
+    "z": "tab_scheduler",
+    "name": "Split rows",
+    "splt": "\\n",
+    "spltType": "str",
+    "arraySplt": 1,
+    "arraySpltType": "len",
+    "stream": false,
+    "addname": "",
+    "x": 740,
+    "y": 80,
+    "wires": [ [ "reminder_send" ] ]
+  },
+  {
+    "id": "reminder_send",
+    "type": "function",
+    "z": "tab_scheduler",
+    "name": "Send reminder",
+    "func": "const row = msg.payload;\nmsg.chatId = row.chat_id;\nmsg.payload = `Напоминание по задаче #${row.id}: ${row.title}\nСрок: ${row.due_at}`;\nmsg.markReminder = row.id;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 930,
+    "y": 80,
+    "wires": [ [ "telegram_out_reminder", "reminder_mark" ] ]
+  },
+  {
+    "id": "telegram_out_reminder",
+    "type": "telegram sender",
+    "z": "tab_scheduler",
+    "name": "Notify",
+    "bot": "telegram_bot",
+    "haserroroutput": false,
+    "outputs": 1,
+    "x": 1120,
+    "y": 60,
+    "wires": [ [] ]
+  },
+  {
+    "id": "reminder_mark",
+    "type": "function",
+    "z": "tab_scheduler",
+    "name": "Mark reminded",
+    "func": "msg.payload = { query: `UPDATE tasks SET reminded_at=CURRENT_TIMESTAMP WHERE id=?;`, params: [msg.markReminder] };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 1120,
+    "y": 120,
+    "wires": [ [ "sqlite_mark" ] ]
+  },
+  {
+    "id": "sqlite_mark",
+    "type": "sqlite",
+    "z": "tab_scheduler",
+    "mydb": "db_config",
+    "name": "Update reminder flag",
+    "sqlquery": "msg.payload",
+    "output": "multi",
+    "x": 1320,
+    "y": 120,
+    "wires": [ [] ]
+  }
+]
